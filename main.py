@@ -56,6 +56,9 @@ def get_stamina(data: HeartRateData):
     score = heart_rate_to_stamina.get(bpm, 0)
     color = get_color(score)
     timestamp = datetime.utcnow().isoformat()
+
+    print(f"📥 Received heart rate: {bpm} → Score: {score}, Color: {color}")
+
     return {
         "staminaScore": score,
         "color": color,
