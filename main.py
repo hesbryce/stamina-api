@@ -52,6 +52,7 @@ def get_color(stamina_score):
 
 @app.post("/stamina")
 def get_stamina(data: HeartRateData):
+    bpm = round(data.heartRate)
     score = heart_rate_to_stamina.get(bpm, 0)
     color = get_color(score)
     timestamp = datetime.utcnow().isoformat()
