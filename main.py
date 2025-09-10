@@ -4,6 +4,9 @@ from datetime import datetime
 
 app = FastAPI()
 
+# Store the latest result (MVP only, in memory)
+latest_value = None
+
 class HeartRateData(BaseModel):
     heartRate: float
 
@@ -26,7 +29,6 @@ def generate_heart_rate_map():
         (range(183, 185), 23), (range(185, 187), 21), (range(187, 189), 19), (range(189, 191), 17),
         (range(191, 193), 15), (range(193, 195), 13), (range(195, 197), 11), (range(197, 205), 10),
     ]
-
     for hr_range, stamina in mappings:
         for bpm in hr_range:
             map[bpm] = stamina
@@ -58,7 +60,8 @@ def root():
         "timestamp": datetime.utcnow().isoformat(),
         "endpoints": {
             "POST /stamina": "Calculate stamina score from heart rate",
-            "GET /health": "Health check endpoint"
+            "GET /health": "Health check endpoint",
+            "GET /latest": "Fetch the most recent stamina result"
         }
     }
 
@@ -72,14 +75,25 @@ def health():
 
 @app.post("/stamina")
 def get_stamina(data: HeartRateData):
+    global latest_value
     bpm = round(data.heartRate)
     score = heart_rate_to_stamina.get(bpm, 0)
     color = get_color(score)
     timestamp = datetime.utcnow().isoformat()
     print(f"✅ Score: {score}% — Zone: {color}")
 
-    return {
+    # Save result for later GET /latest
+    latest_value = {
+        "heartRate": bpm,
         "staminaScore": score,
         "color": color,
         "timestamp": timestamp
     }
+    return latest_value
+
+@app.get("/latest")
+def latest():
+    if latest_value:
+        return latest_value
+    return {"message": "No data yet. Post to /stamina first."}
+
