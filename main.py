@@ -69,10 +69,13 @@ def get_color(stamina_score):
 
 @app.get("/")
 def root():
+    cst = pytz.timezone('America/Chicago')
+    timestamp = datetime.now(cst).strftime("%I:%M %p CST")
+
     return {
         "message": "Stamina API is running!",
         "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": timestamp,
         "endpoints": {
             "POST /stamina": "Calculate stamina score from heart rate",
             "GET /health": "Health check endpoint",
@@ -82,9 +85,11 @@ def root():
 
 @app.get("/health")
 def health():
+    cst = pytz.timezone('America/Chicago')
+    timestamp = datetime.now(cst).strftime("%I:%M %p CST")
     return {
         "status": "ok",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": timestamp,
         "service": "stamina-api"
     }
 
