@@ -70,8 +70,7 @@ def get_color(stamina_score):
 @app.get("/")
 def root():
     cst = pytz.timezone('America/Chicago')
-    timestamp = datetime.now(cst).strftime("%I:%M %p CST")
-
+    timestamp = datetime.now(cst).strftime("%I:%M:%S %p CST")
     return {
         "message": "Stamina API is running!",
         "status": "healthy",
@@ -86,7 +85,7 @@ def root():
 @app.get("/health")
 def health():
     cst = pytz.timezone('America/Chicago')
-    timestamp = datetime.now(cst).strftime("%I:%M %p CST")
+    timestamp = datetime.now(cst).strftime("%I:%M:%S %p CST")
     return {
         "status": "ok",
         "timestamp": timestamp,
@@ -100,7 +99,8 @@ def get_stamina(data: HeartRateData):
     score = heart_rate_to_stamina.get(bpm, 0)
     color = get_color(score)
     cst = pytz.timezone('America/Chicago')
-    timestamp = datetime.now(cst).strftime("%I:%M %p CST")
+    # Change this line in all three endpoints:
+    timestamp = datetime.now(cst).strftime("%I:%M:%S %p CST")
     print(f"✅ Score: {score}% — Zone: {color}")
 
     # Save result for later GET /latest
