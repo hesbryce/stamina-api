@@ -6,11 +6,11 @@ from fastapi.middleware.cors import CORSMiddleware   # <-- ADD THIS
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://hesbryce.github.io"],  # GitHub Pages domain
-    allow_methods=["GET"],
+    allow_origins=["*"],          # TEMP: allow everything to verify
+    allow_methods=["GET", "OPTIONS"],
     allow_headers=["*"],
+    allow_credentials=False,
 )
-
 # Store the latest result (MVP only, in memory)
 latest_value = None
 
