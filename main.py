@@ -1,8 +1,17 @@
+# This is a REST API that receives heart rate data from your watch and converts it to stamina scores for web display.
+# POST /stamina: Receives heart rate, calculates stamina, stores result
+# GET /latest: Returns stored stamina data for web dashboard
+# GET /: API documentation
+# GET /health: Server status check
+
+
 from fastapi import FastAPI
 from pydantic import BaseModel
 from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
+import pytz
 
+# Get current time in CST
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
@@ -85,13 +94,15 @@ def get_stamina(data: HeartRateData):
     bpm = round(data.heartRate)
     score = heart_rate_to_stamina.get(bpm, 0)
     color = get_color(score)
-    timestamp = datetime.utcnow().isoformat()
+    cst = pytz.timezone('America/Chicago')
+    timestamp = datetime.now(cst).strftime("%I:%M %p CST")
     print(f"✅ Score: {score}% — Zone: {color}")
 
     # Save result for later GET /latest
     latest_value = {
+        # remove any personal health data here. 
         "heartRate": bpm,
-        "staminaScore": score,
+        "staminaScore": score, 
         "color": color,
         "timestamp": timestamp
     }
