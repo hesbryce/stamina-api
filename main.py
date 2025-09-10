@@ -50,6 +50,26 @@ def get_color(stamina_score):
     else:
         return "red"
 
+@app.get("/")
+def root():
+    return {
+        "message": "Stamina API is running!",
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "endpoints": {
+            "POST /stamina": "Calculate stamina score from heart rate",
+            "GET /health": "Health check endpoint"
+        }
+    }
+
+@app.get("/health")
+def health():
+    return {
+        "status": "ok",
+        "timestamp": datetime.utcnow().isoformat(),
+        "service": "stamina-api"
+    }
+
 @app.post("/stamina")
 def get_stamina(data: HeartRateData):
     bpm = round(data.heartRate)
