@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from datetime import datetime
-from fastapi.middleware.cors import CORSMiddleware   # <-- ADD THIS
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 app.add_middleware(
