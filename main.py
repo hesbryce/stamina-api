@@ -6,18 +6,17 @@ from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],          # TEMP: allow everything to verify
+    allow_origins=["*"],          
     allow_methods=["GET", "OPTIONS"],
     allow_headers=["*"],
     allow_credentials=False,
 )
-# Store the latest result (MVP only, in memory)
+
 latest_value = None
 
 class HeartRateData(BaseModel):
     heartRate: float
 
-# Convert the Swift-style BPM range mappings into Python
 def generate_heart_rate_map():
     map = {}
     mappings = [
