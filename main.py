@@ -1,8 +1,15 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from datetime import datetime
+from fastapi.middleware.cors import CORSMiddleware   # <-- ADD THIS
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://hesbryce.github.io"],  # GitHub Pages domain
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 
 # Store the latest result (MVP only, in memory)
 latest_value = None
