@@ -56,8 +56,9 @@ def validate_user_id(user_id: str) -> bool:
     """Basic validation for Apple userID format"""
     if not user_id or len(user_id) < 10:
         return False
-    # Apple user IDs are typically alphanumeric with periods
-    if not re.match(r'^[a-zA-Z0-9._-]+$', user_id):
+    # Apple user IDs: 6 digits, dot, 32 hex chars, dot, 4 digits
+    # Example: 000301.87512a694c344ba585b5d437e995bf62.2105
+    if not re.match(r'^\d{6}\.[a-f0-9]{32}\.\d{4}$', user_id):
         return False
     return True
 
