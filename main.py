@@ -26,10 +26,10 @@ app.add_middleware(
 # Multi-user storage - dictionary keyed by userID
 user_data = {}
 
-class HeartRateData(BaseModel):
-    heartRate: float
-    userID: str  # Required - comes from Apple Sign In
-
+class StaminaData(BaseModel):
+    staminaScore: int  # New format
+    userID: str
+    
 def is_valid_user_id(user_id: str) -> bool:
     """Basic validation for Apple userID format"""
     # Apple userIDs are typically alphanumeric strings
