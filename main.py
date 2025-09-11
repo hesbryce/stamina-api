@@ -26,8 +26,10 @@ app.add_middleware(
 # Security setup
 security = HTTPBearer()
 
-# For now, use a simple secret token (you'll move this to environment variables)
-SECRET_TOKEN = "your-secret-stamina-token-2024"  # Change this to something random
+# Get secret token from environment variable (secure approach)
+SECRET_TOKEN = os.getenv("SECRET_TOKEN")
+if not SECRET_TOKEN:
+    raise RuntimeError("SECRET_TOKEN environment variable is not set")
 
 latest_value = None
 
