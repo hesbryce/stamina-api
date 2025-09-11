@@ -1,66 +1,39 @@
 # This is a REST API that receives heart rate data from your watch and converts it to stamina scores for web display.
-# POST /stamina: Receives heart rate, calculates stamina, stores result (REQUIRES AUTH OR USER_ID)
-# GET /latest: Returns stored stamina data for web dashboard (REQUIRES AUTH OR USER_ID)
+# POST /stamina: Receives heart rate + userID, calculates stamina, stores per user
+# GET /latest: Returns stored stamina data for specific user
 # GET /: API documentation
 # GET /health: Server status check
 
-from fastapi import FastAPI, HTTPException, Depends, Query
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 import pytz
-import os
 import re
 
 app = FastAPI()
 
-# CORS middleware - updated for authentication
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["*", "Authorization"],
+    allow_headers=["*"],
     allow_credentials=False,
 )
 
-# Security setup
-security = HTTPBearer()
-
-# Get secret token from environment variable (for backward compatibility)
-SECRET_TOKEN = os.getenv("SECRET_TOKEN")
-if not SECRET_TOKEN:
-    raise RuntimeError("SECRET_TOKEN environment variable is not set")
-
 # Multi-user storage - dictionary keyed by userID
 user_data = {}
-# Keep single-user storage for backward compatibility
-latest_value = None
 
 class HeartRateData(BaseModel):
     heartRate: float
-    userID: Optional[str] = None
+    userID: str  # Required - comes from Apple Sign In
 
-def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Verify the bearer token for backward compatibility"""
-    if credentials.credentials != SECRET_TOKEN:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid authentication token",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-    return credentials
-
-def validate_user_id(user_id: str) -> bool:
+def is_valid_user_id(user_id: str) -> bool:
     """Basic validation for Apple userID format"""
-    if not user_id or len(user_id) < 10:
-        return False
-    # Apple user IDs: 6 digits, dot, 32 hex chars, dot, 4 digits
-    # Example: 000301.87512a694c344ba585b5d437e995bf62.2105
-    if not re.match(r'^\d{6}\.[a-f0-9]{32}\.\d{4}$', user_id):
-        return False
-    return True
+    # Apple userIDs are typically alphanumeric strings
+    return bool(re.match(r'^[a-zA-Z0-9._-]+$', user_id)) and len(user_id) > 5
 
 def generate_heart_rate_map():
     map = {}
@@ -103,21 +76,20 @@ def get_color(stamina_score):
     else:
         return "red"
 
-# Public endpoints (no auth required)
 @app.get("/")
 def root():
     cst = pytz.timezone('America/Chicago')
     timestamp = datetime.now(cst).strftime("%I:%M:%S %p CST")
     return {
-        "message": "Stamina API is running!",
+        "message": "Stamina API with Apple Sign In support!",
         "status": "healthy",
         "timestamp": timestamp,
+        "authentication": "Apple Sign In (userID required)",
         "endpoints": {
-            "POST /stamina": "Calculate stamina score from heart rate (requires auth or userID)",
+            "POST /stamina": "Calculate stamina score from heart rate (requires userID)",
             "GET /health": "Health check endpoint",
-            "GET /latest": "Fetch the most recent stamina result (requires auth or userID)"
-        },
-        "users_active": len(user_data)
+            "GET /latest?userID=xxx": "Fetch the most recent stamina result for user"
+        }
     }
 
 @app.get("/health")
@@ -128,74 +100,58 @@ def health():
         "status": "ok",
         "timestamp": timestamp,
         "service": "stamina-api",
-        "active_users": len(user_data)
+        "users_count": len(user_data)
     }
 
-# Protected endpoints (auth required OR userID provided)
 @app.post("/stamina")
-def get_stamina(data: HeartRateData, token: Optional[HTTPAuthorizationCredentials] = Depends(security)):
-    global latest_value
+def get_stamina(data: HeartRateData):
+    # Validate userID
+    if not is_valid_user_id(data.userID):
+        raise HTTPException(status_code=400, detail="Invalid userID format")
     
+    # Calculate stamina
     bpm = round(data.heartRate)
     score = heart_rate_to_stamina.get(bpm, 0)
     color = get_color(score)
     cst = pytz.timezone('America/Chicago')
     timestamp = datetime.now(cst).strftime("%I:%M:%S %p CST")
     
+    # Store per user
     result = {
         "heartRate": bpm,
         "staminaScore": score,
         "color": color,
-        "timestamp": timestamp
+        "timestamp": timestamp,
+        "userID": data.userID
     }
     
-    # Handle multi-user mode (userID provided)
-    if data.userID:
-        print(f"DEBUG: Received userID: '{data.userID}'")
-        print(f"DEBUG: UserID length: {len(data.userID)}")
-        is_valid = validate_user_id(data.userID)
-        print(f"DEBUG: UserID validation result: {is_valid}")
-        
-        if not is_valid:
-            print(f"DEBUG: UserID validation failed for: {data.userID}")
-            raise HTTPException(status_code=400, detail="Invalid userID format")
-        
-        user_data[data.userID] = result
-        print(f"✅ Multi-user request - User: {data.userID[:8]}... Score: {score}% — Zone: {color}")
-        return result
+    user_data[data.userID] = result
     
-    # Handle single-user mode (bearer token required)
-    if not token or token.credentials != SECRET_TOKEN:
-        raise HTTPException(
-            status_code=401,
-            detail="Authentication required: provide valid bearer token or userID",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
+    # Log successful request (with truncated userID for privacy)
+    user_display = f"{data.userID[:8]}..." if len(data.userID) > 8 else data.userID
+    print(f"✅ User {user_display} - HR: {bpm} → Score: {score}% — Zone: {color}")
     
-    latest_value = result
-    print(f"✅ Single-user authenticated request - Score: {score}% — Zone: {color}")
     return result
 
 @app.get("/latest")
-def latest(user_id: Optional[str] = Query(None), token: Optional[HTTPAuthorizationCredentials] = Depends(security)):
-    # Handle multi-user mode (userID provided)
-    if user_id:
-        if not validate_user_id(user_id):
-            raise HTTPException(status_code=400, detail="Invalid userID format")
-        
-        if user_id in user_data:
-            return user_data[user_id]
-        else:
-            return {"message": f"No data yet for user {user_id[:8]}..."}
+def latest(userID: str = Query(..., description="User ID from Apple Sign In")):
+    # Validate userID
+    if not is_valid_user_id(userID):
+        raise HTTPException(status_code=400, detail="Invalid userID format")
     
-    # Handle single-user mode (bearer token required)
-    if not token or token.credentials != SECRET_TOKEN:
+    # Check if user has data
+    if userID not in user_data:
         raise HTTPException(
-            status_code=401,
-            detail="Authentication required: provide valid bearer token or userID parameter",
-            headers={"WWW-Authenticate": "Bearer"}
+            status_code=404,
+            detail=f"No data found for user. Send heart rate to /stamina first."
         )
     
-    if latest_value:
-        return latest_value
-    return {"message": "No data yet. Post to /stamina first."}
+    return user_data[userID]
+
+# Debug endpoint to see how many users we have (remove in production)
+@app.get("/debug/users")
+def debug_users():
+    return {
+        "total_users": len(user_data),
+        "user_ids": [f"{uid[:8]}..." for uid in user_data.keys()]
+    }
