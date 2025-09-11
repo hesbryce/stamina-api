@@ -1,30 +1,48 @@
 # This is a REST API that receives heart rate data from your watch and converts it to stamina scores for web display.
-# POST /stamina: Receives heart rate, calculates stamina, stores result
-# GET /latest: Returns stored stamina data for web dashboard
+# POST /stamina: Receives heart rate, calculates stamina, stores result (REQUIRES AUTH)
+# GET /latest: Returns stored stamina data for web dashboard (REQUIRES AUTH)
 # GET /: API documentation
 # GET /health: Server status check
 
-
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
 import pytz
+import os
 
-# Get current time in CST
 app = FastAPI()
+
+# CORS middleware - updated for authentication
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],          
-    allow_methods=["GET", "OPTIONS"],
-    allow_headers=["*"],
+    allow_origins=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*", "Authorization"],  # Added Authorization header
     allow_credentials=False,
 )
+
+# Security setup
+security = HTTPBearer()
+
+# For now, use a simple secret token (you'll move this to environment variables)
+SECRET_TOKEN = "your-secret-stamina-token-2024"  # Change this to something random
 
 latest_value = None
 
 class HeartRateData(BaseModel):
     heartRate: float
+
+def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Verify the bearer token"""
+    if credentials.credentials != SECRET_TOKEN:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authentication token",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    return credentials
 
 def generate_heart_rate_map():
     map = {}
@@ -67,6 +85,7 @@ def get_color(stamina_score):
     else:
         return "red"
 
+# Public endpoints (no auth required)
 @app.get("/")
 def root():
     cst = pytz.timezone('America/Chicago')
@@ -76,9 +95,9 @@ def root():
         "status": "healthy",
         "timestamp": timestamp,
         "endpoints": {
-            "POST /stamina": "Calculate stamina score from heart rate",
+            "POST /stamina": "Calculate stamina score from heart rate (requires auth)",
             "GET /health": "Health check endpoint",
-            "GET /latest": "Fetch the most recent stamina result"
+            "GET /latest": "Fetch the most recent stamina result (requires auth)"
         }
     }
 
@@ -92,30 +111,28 @@ def health():
         "service": "stamina-api"
     }
 
+# Protected endpoints (auth required)
 @app.post("/stamina")
-def get_stamina(data: HeartRateData):
+def get_stamina(data: HeartRateData, token: HTTPAuthorizationCredentials = Depends(verify_token)):
     global latest_value
     bpm = round(data.heartRate)
     score = heart_rate_to_stamina.get(bpm, 0)
     color = get_color(score)
     cst = pytz.timezone('America/Chicago')
-    # Change this line in all three endpoints:
     timestamp = datetime.now(cst).strftime("%I:%M:%S %p CST")
-    print(f"✅ Score: {score}% — Zone: {color}")
+    print(f"✅ Authenticated request - Score: {score}% — Zone: {color}")
 
     # Save result for later GET /latest
     latest_value = {
-        # remove any personal health data here. 
         "heartRate": bpm,
-        "staminaScore": score, 
+        "staminaScore": score,
         "color": color,
         "timestamp": timestamp
     }
     return latest_value
 
 @app.get("/latest")
-def latest():
+def latest(token: HTTPAuthorizationCredentials = Depends(verify_token)):
     if latest_value:
         return latest_value
     return {"message": "No data yet. Post to /stamina first."}
-
