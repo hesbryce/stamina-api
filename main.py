@@ -151,7 +151,13 @@ def get_stamina(data: HeartRateData, token: Optional[HTTPAuthorizationCredential
     
     # Handle multi-user mode (userID provided)
     if data.userID:
-        if not validate_user_id(data.userID):
+        print(f"DEBUG: Received userID: '{data.userID}'")
+        print(f"DEBUG: UserID length: {len(data.userID)}")
+        is_valid = validate_user_id(data.userID)
+        print(f"DEBUG: UserID validation result: {is_valid}")
+        
+        if not is_valid:
+            print(f"DEBUG: UserID validation failed for: {data.userID}")
             raise HTTPException(status_code=400, detail="Invalid userID format")
         
         user_data[data.userID] = result
