@@ -11,8 +11,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 import pytz
 import re
+import string
+import secrets
 
 app = FastAPI()
+
+share_codes = {}  # Maps share_code -> user_id
+professional_accounts = {}  # Maps professional_id -> client list
 
 # CORS middleware
 app.add_middleware(
@@ -130,4 +135,141 @@ def debug_users():
     return {
         "total_users": len(user_data),
         "user_ids": [f"{uid[:8]}..." for uid in user_data.keys()]
+    }
+    
+def generate_share_code():
+    """Generate a 6-character share code like XK7M2P"""
+    return ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
+
+class ShareCodeRequest(BaseModel):
+    userID: str
+
+class RedeemCodeRequest(BaseModel):
+    shareCode: str
+    professionalID: str
+
+@app.post("/generate-share-code")
+def generate_user_share_code(request: ShareCodeRequest):
+    """Free users generate codes to share with professionals"""
+    
+    # Validate user exists and has data
+    if request.userID not in user_data:
+        raise HTTPException(404, "User not found. Please use the app first to generate stamina data.")
+    
+    # Check if user already has a code
+    existing_code = None
+    for code, uid in share_codes.items():
+        if uid == request.userID:
+            existing_code = code
+            break
+    
+    if existing_code:
+        return {
+            "share_code": existing_code,
+            "message": "Using existing share code",
+            "instructions": "Give this code to your trainer or healthcare provider"
+        }
+    
+    # Generate new code
+    code = generate_share_code()
+    while code in share_codes:  # Ensure uniqueness
+        code = generate_share_code()
+    
+    share_codes[code] = request.userID
+    
+    return {
+        "share_code": code,
+        "message": "Share code generated successfully",
+        "instructions": "Give this code to your trainer or healthcare provider"
+    }
+
+@app.post("/redeem-share-code")
+def redeem_share_code(request: RedeemCodeRequest):
+    """Professionals redeem client codes to monitor them"""
+    
+    # Validate share code exists
+    if request.shareCode not in share_codes:
+        raise HTTPException(404, "Invalid share code. Please check the code and try again.")
+    
+    client_user_id = share_codes[request.shareCode]
+    
+    # Initialize professional account if new
+    if request.professionalID not in professional_accounts:
+        professional_accounts[request.professionalID] = {
+            "clients": [],
+            "subscription_tier": "starter",  # Default tier
+            "max_clients": 10
+        }
+    
+    professional = professional_accounts[request.professionalID]
+    
+    # Check if client already added
+    if client_user_id in professional["clients"]:
+        return {
+            "status": "already_added",
+            "message": "Client already in your monitoring list",
+            "client_count": len(professional["clients"])
+        }
+    
+    # Check subscription limits
+    if len(professional["clients"]) >= professional["max_clients"]:
+        raise HTTPException(403, f"Client limit reached ({professional['max_clients']}). Please upgrade your subscription.")
+    
+    # Add client to professional's list
+    professional["clients"].append(client_user_id)
+    
+    return {
+        "status": "success",
+        "message": "Client added successfully",
+        "client_count": len(professional["clients"]),
+        "max_clients": professional["max_clients"]
+    }
+
+@app.get("/professional/dashboard/{professional_id}")
+def get_professional_dashboard(professional_id: str):
+    """Get all clients for a professional"""
+    
+    if professional_id not in professional_accounts:
+        return {
+            "clients": [],
+            "subscription_tier": "none",
+            "client_count": 0
+        }
+    
+    professional = professional_accounts[professional_id]
+    client_data = []
+    
+    for client_id in professional["clients"]:
+        if client_id in user_data:
+            data = user_data[client_id]
+            client_data.append({
+                "user_display": f"{client_id[:8]}..." if len(client_id) > 8 else client_id,
+                "stamina_score": data["staminaScore"],
+                "color": data["color"],
+                "last_seen": data["timestamp"],
+                "status": "connected" if not is_data_stale(data["timestamp"]) else "disconnected"
+            })
+    
+    return {
+        "clients": client_data,
+        "subscription_tier": professional["subscription_tier"],
+        "client_count": len(client_data),
+        "max_clients": professional["max_clients"]
+    }
+
+def is_data_stale(timestamp_str):
+    """Check if data is older than 5 minutes"""
+    try:
+        # This is a simplified stale check - you can improve this
+        return False  # For now, assume all data is fresh
+    except:
+        return True
+
+# Debug endpoint to see share codes
+@app.get("/debug/share-codes")
+def debug_share_codes():
+    return {
+        "total_codes": len(share_codes),
+        "codes": [{"code": code, "user": f"{uid[:8]}..."} for code, uid in share_codes.items()],
+        "professionals": len(professional_accounts)
     }
